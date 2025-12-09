@@ -1,0 +1,88 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+        {
+            "label": "Create release output directory",
+            "type": "shell",
+            "command": "New-Item -ItemType directory -Path 'bin/release' -Force",
+            "problemMatcher": []
+        },
+        {
+            "label": "Compile resource file",
+            "type": "shell",
+            "command": "windres",
+            "args": [
+                "main_resources.rc",
+                "-o",
+                "main_resources.o"
+            ],
+            "dependsOn": "Create release output directory",
+            "problemMatcher": []
+        },
+        {
+            "label": "build release",
+            "type": "shell",
+            "command": "g++",
+            "args": [
+                "-O2",
+                "-s",
+                "-std=c++20",
+                "main.cpp",
+                "main_resources.o",
+                "-o",
+                "bin/release/Desktop Rain.exe",
+                "-lgdi32",
+                "-municode",
+                "-mwindows"
+            ],
+            "group": "build",
+            "dependsOn": "Compile resource file",
+            "problemMatcher": [
+                "$gcc"
+            ]
+        },
+		{
+			"label": "Create output directory",
+			"type": "shell",
+			"command": "New-Item -ItemType directory -Path 'bin/debug' -Force",
+			"problemMatcher": []
+		},
+		{
+			"label": "build",
+			"type": "shell",
+			"command": "g++",
+			"args": [
+				"-g",
+				"-std=c++20",
+				"main.cpp",
+				"-o",
+				"bin/debug/debug.exe",
+				"-lgdi32",
+				"-municode"
+			],
+			"group": "build",
+			"dependsOn": "Create output directory",
+			"problemMatcher": [
+				"$gcc"
+			]
+		},
+		{
+			"label": "build active file",
+			"type": "shell",
+			"command": "g++",
+			"args": [
+				"-g",
+				"-std=c++20",
+				"'${file}'",
+				"-o",
+				"'${fileDirname}\\${fileBasenameNoExtension}.exe'",
+				"-lgdi32",
+				"-municode"
+			],
+			"group": "build",
+			"problemMatcher": [
+				"$gcc"
+			]
+		}
+	]
+}
