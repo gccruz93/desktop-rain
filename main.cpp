@@ -38,11 +38,23 @@ int screenHeight = 0;
 
 LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam)
 {
-    if (nCode == HC_ACTION && (wParam == WM_KEYDOWN || wParam == WM_SYSKEYDOWN))
+    if (nCode == HC_ACTION && wParam == WM_KEYDOWN)
     {
-        if (g_hwnd != NULL)
+        KBDLLHOOKSTRUCT *pKeyBoard = (KBDLLHOOKSTRUCT *)lParam;
+        if (pKeyBoard->vkCode != VK_SHIFT &&
+            pKeyBoard->vkCode != VK_CONTROL &&
+            pKeyBoard->vkCode != VK_MENU &&
+            pKeyBoard->vkCode != VK_LSHIFT &&
+            pKeyBoard->vkCode != VK_RSHIFT &&
+            pKeyBoard->vkCode != VK_LCONTROL &&
+            pKeyBoard->vkCode != VK_RCONTROL &&
+            pKeyBoard->vkCode != VK_LMENU &&
+            pKeyBoard->vkCode != VK_RMENU)
         {
-            PostMessage(g_hwnd, WM_APP_CREATE_RAINDROP, 0, 0);
+            if (g_hwnd != NULL)
+            {
+                PostMessage(g_hwnd, WM_APP_CREATE_RAINDROP, 0, 0);
+            }
         }
     }
 
