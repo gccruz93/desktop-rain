@@ -28,6 +28,11 @@ public:
     int Run();
     void AddRaindrop();
 
+    // Customization
+    bool m_autoRain = false;
+    COLORREF m_rainColor = RGB(255, 255, 255);
+    COLORREF m_customColors[16] = {0};
+
 private:
     // System
     HINSTANCE m_hInstance;

@@ -7,9 +7,6 @@
 #include <algorithm>
 
 static RainApplication *g_pAppInstance = nullptr;
-static bool g_autoRain = false;
-static COLORREF g_rainColor = RGB(255, 255, 255);
-static COLORREF g_customColors[16] = {0};
 
 RainApplication::RainApplication(HINSTANCE hInstance) : m_hInstance(hInstance)
 {
@@ -102,7 +99,7 @@ void RainApplication::Update(float dt)
         windFactor = (static_cast<float>(mousePos.x) - (m_screenWidth / 2.0f)) / (m_screenWidth / 2.0f);
     }
 
-    if (g_autoRain)
+    if (m_autoRain)
     {
         static float autoRainTimer = 0.0f;
         autoRainTimer += dt;
@@ -186,9 +183,9 @@ void RainApplication::Render()
     m_renderTarget->SetAntialiasMode(D2D1_ANTIALIAS_MODE_ALIASED);
     m_renderTarget->Clear(D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.0f));
 
-    float baseR = GetRValue(g_rainColor) / 255.0f;
-    float baseG = GetGValue(g_rainColor) / 255.0f;
-    float baseB = GetBValue(g_rainColor) / 255.0f;
+    float baseR = GetRValue(m_rainColor) / 255.0f;
+    float baseG = GetGValue(m_rainColor) / 255.0f;
+    float baseB = GetBValue(m_rainColor) / 255.0f;
 
     for (const auto &drop : m_raindrops)
     {
@@ -346,7 +343,7 @@ LRESULT RainApplication::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam)
             GetCursorPos(&pt);
             HMENU hMenu = CreatePopupMenu();
 
-            AppendMenu(hMenu, g_autoRain ? MF_CHECKED : MF_STRING, 2, L"Auto Rain");
+            AppendMenu(hMenu, m_autoRain ? MF_CHECKED : MF_STRING, 2, L"Auto Rain");
             AppendMenu(hMenu, MF_STRING, 3, L"Choose Color");
             AppendMenu(hMenu, MF_SEPARATOR, 0, NULL);
             AppendMenu(hMenu, MF_STRING, 1, L"Exit");
@@ -360,20 +357,20 @@ LRESULT RainApplication::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam)
     case WM_COMMAND:
         if (LOWORD(wParam) == 2) // Toggle Auto Rain
         {
-            g_autoRain = !g_autoRain;
+            m_autoRain = !m_autoRain;
         }
         else if (LOWORD(wParam) == 3) // Choose Color
         {
             CHOOSECOLOR cc = {0};
             cc.lStructSize = sizeof(cc);
             cc.hwndOwner = m_hwnd;
-            cc.lpCustColors = g_customColors;
-            cc.rgbResult = g_rainColor;
+            cc.lpCustColors = m_customColors;
+            cc.rgbResult = m_rainColor;
             cc.Flags = CC_FULLOPEN | CC_RGBINIT;
 
             if (ChooseColor(&cc))
             {
-                g_rainColor = cc.rgbResult;
+                m_rainColor = cc.rgbResult;
             }
         }
         else if (LOWORD(wParam) == 1) // Exit
@@ -402,7 +399,7 @@ LRESULT CALLBACK RainApplication::KeyboardProc(int nCode, WPARAM wParam, LPARAM 
                            pKey->vkCode == VK_RCONTROL || pKey->vkCode == VK_LMENU ||
                            pKey->vkCode == VK_RMENU);
 
-        if (!isModifier && g_pAppInstance && !g_autoRain)
+        if (!isModifier && g_pAppInstance && !g_pAppInstance->m_autoRain)
         {
             g_pAppInstance->AddRaindrop();
         }
