@@ -8,6 +8,7 @@
 #pragma comment(lib, "d2d1.lib")
 
 static RainApplication *g_pAppInstance = nullptr;
+static bool g_autoRain = false;
 
 RainApplication::RainApplication(HINSTANCE hInstance) : m_hInstance(hInstance)
 {
@@ -98,6 +99,17 @@ void RainApplication::Update(float dt)
         POINT mousePos;
         GetCursorPos(&mousePos);
         windFactor = (static_cast<float>(mousePos.x) - (m_screenWidth / 2.0f)) / (m_screenWidth / 2.0f);
+    }
+
+    if (g_autoRain)
+    {
+        static float autoRainTimer = 0.0f;
+        autoRainTimer += dt;
+        if (autoRainTimer >= 0.05f)
+        {
+            AddRaindrop();
+            autoRainTimer = 0.0f;
+        }
     }
 
     for (auto &drop : m_raindrops)
@@ -326,6 +338,13 @@ LRESULT RainApplication::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam)
             POINT pt;
             GetCursorPos(&pt);
             HMENU hMenu = CreatePopupMenu();
+
+            UINT flags = MF_STRING;
+            if (g_autoRain)
+                flags |= MF_CHECKED;
+
+            AppendMenu(hMenu, flags, 1, L"Auto Rain");
+            AppendMenu(hMenu, MF_SEPARATOR, 0, NULL);
             AppendMenu(hMenu, MF_STRING, 2, L"Exit");
 
             SetForegroundWindow(m_hwnd);
@@ -335,7 +354,11 @@ LRESULT RainApplication::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam)
         }
         return 0;
     case WM_COMMAND:
-        if (LOWORD(wParam) == 2)
+        if (LOWORD(wParam) == 1) // Toggle Auto Rain
+        {
+            g_autoRain = !g_autoRain;
+        }
+        else if (LOWORD(wParam) == 2) // Exit
             PostMessage(m_hwnd, WM_QUIT, 0, 0);
         return 0;
     case Config::WM_APP_CREATE_RAINDROP:
@@ -359,7 +382,7 @@ LRESULT CALLBACK RainApplication::KeyboardProc(int nCode, WPARAM wParam, LPARAM 
                            pKey->vkCode == VK_RCONTROL || pKey->vkCode == VK_LMENU ||
                            pKey->vkCode == VK_RMENU);
 
-        if (!isModifier && g_pAppInstance)
+        if (!isModifier && g_pAppInstance && !g_autoRain)
         {
             g_pAppInstance->AddRaindrop();
         }
