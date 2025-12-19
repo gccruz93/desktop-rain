@@ -1,14 +1,20 @@
 {
-	"version": "2.0.0",
-	"tasks": [
+    "version": "2.0.0",
+    "tasks": [
         {
-            "label": "Create release output directory",
+            "label": "_create_output_release_dir",
             "type": "shell",
             "command": "New-Item -ItemType directory -Path 'build/release' -Force",
             "problemMatcher": []
         },
         {
-            "label": "Compile resource file",
+            "label": "_create_output_debug_dir",
+            "type": "shell",
+            "command": "New-Item -ItemType directory -Path 'build/debug' -Force",
+            "problemMatcher": []
+        },
+        {
+            "label": "_compile_resources",
             "type": "shell",
             "command": "windres",
             "args": [
@@ -16,11 +22,10 @@
                 "-o",
                 "resources.o"
             ],
-            "dependsOn": "Create release output directory",
             "problemMatcher": []
         },
         {
-            "label": "build release",
+            "label": "Build Release",
             "type": "shell",
             "command": "g++",
             "args": [
@@ -32,58 +37,44 @@
                 "-o",
                 "build/release/Desktop Rain.exe",
                 "-ld2d1",
+                "-lcomdlg32",
                 "-municode",
                 "-mwindows"
             ],
             "group": "build",
-            "dependsOn": "Compile resource file",
+            "dependsOn": [
+                "_compile_resources",
+                "_create_output_release_dir"
+            ],
             "problemMatcher": [
                 "$gcc"
             ]
         },
-		{
-			"label": "Create output directory",
-			"type": "shell",
-			"command": "New-Item -ItemType directory -Path 'build/debug' -Force",
-			"problemMatcher": []
-		},
-		{
-			"label": "build",
-			"type": "shell",
-			"command": "g++",
-			"args": [
-				"-g",
-				"-std=c++23",
-				"src/*.cpp",
-				"resources.o",
-				"-o",
-				"build/debug/debug.exe",
-				"-ld2d1",
-				"-municode"
-			],
-			"group": "build",
-			"dependsOn": ["Create output directory", "Compile resource file"],
-			"problemMatcher": [
-				"$gcc"
-			]
-		},
-		{
-			"label": "build active file",
-			"type": "shell",
-			"command": "g++",
-			"args": [
-				"-g",
-				"-std=c++23",
-				"'${file}'",
-				"-o",
-				"'${fileDirname}\\${fileBasenameNoExtension}.exe'",
-				"-ld2d1",
-				"-municode"
-			],
-			"group": "build",
-			"problemMatcher": [
-				"$gcc"
-			]
-		}
-	]
+        {
+            "label": "Build Debug",
+            "type": "shell",
+            "command": "g++",
+            "args": [
+                "-Wall",
+                "-g",
+                "-std=c++23",
+                "src/*.cpp",
+                "resources.o",
+                "-o",
+                "build/debug/debug.exe",
+                "-ld2d1",
+                "-lcomdlg32",
+                "-municode",
+                "-mwindows"
+            ],
+            "group": "build",
+            "dependsOn": [
+                "_compile_resources",
+                "_create_output_debug_dir"
+            ],
+            "problemMatcher": [
+                "$gcc"
+            ]
+        }
+    ]
 }
