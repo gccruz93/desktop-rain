@@ -327,6 +327,9 @@ LRESULT RainApplication::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam)
             GetCursorPos(&pt);
             HMENU hMenu = CreatePopupMenu();
             AppendMenu(hMenu, MF_STRING, 2, L"Exit");
+
+            SetForegroundWindow(m_hwnd);
+
             TrackPopupMenu(hMenu, TPM_RIGHTBUTTON | TPM_NONOTIFY, pt.x, pt.y, 0, m_hwnd, NULL);
             DestroyMenu(hMenu);
         }
