@@ -2,10 +2,10 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Debug Overlay (MinGW64)",
+            "name": "Debug",
             "type": "cppdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/build/debug/debug.exe",
+            "program": "${workspaceFolder}/build/debug/Desktop Rain.exe",
             "args": [],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",

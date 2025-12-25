@@ -4,9 +4,8 @@
         {
             "label": "Build Debug",
             "type": "shell",
-            "command": "bash",
+            "command": ".\\build.bat",
             "args": [
-                "build.sh",
                 "debug"
             ],
             "group": {
@@ -16,21 +15,20 @@
             "problemMatcher": [
                 "$gcc"
             ],
-            "detail": "Compiles in Debug mode using build.sh (with console)"
+            "detail": "Compiles in Debug mode using build.bat (with console)"
         },
         {
             "label": "Build Release",
             "type": "shell",
-            "command": "bash",
+            "command": ".\\build.bat",
             "args": [
-                "build.sh",
                 "release"
             ],
             "group": "build",
             "problemMatcher": [
                 "$gcc"
             ],
-            "detail": "Compiles in Release mode using build.sh"
+            "detail": "Compiles in Release mode using build.bat"
         }
     ]
 }
