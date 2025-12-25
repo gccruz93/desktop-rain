@@ -19,11 +19,11 @@ struct ComDeleter
 template <typename T>
 using ComPtr = std::unique_ptr<T, ComDeleter<T>>;
 
-class RainApplication
+class RainApp
 {
 public:
-    RainApplication(HINSTANCE hInstance);
-    ~RainApplication();
+    RainApp(HINSTANCE hInstance);
+    ~RainApp();
 
     int Run();
     void AddRaindrop();

@@ -1,8 +1,8 @@
 #include <windows.h>
-#include "RainApplication.h"
+#include "RainApp.h"
 
 int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int)
 {
-    RainApplication app(hInstance);
+    RainApp app(hInstance);
     return app.Run();
 }

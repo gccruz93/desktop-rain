@@ -1,14 +1,16 @@
-#include "RainApplication.h"
+#include "RainApp.h"
 #include <shellapi.h>
 #include <commdlg.h>
 #include <cmath>
 #include <numbers>
 #include <chrono>
 #include <algorithm>
+#include <format>
+#include <ranges>
 
-static RainApplication *g_pAppInstance = nullptr;
+static RainApp *g_pAppInstance = nullptr;
 
-RainApplication::RainApplication(HINSTANCE hInstance) : m_hInstance(hInstance)
+RainApp::RainApp(HINSTANCE hInstance) : m_hInstance(hInstance)
 {
     m_screenWidth = GetSystemMetrics(SM_CXSCREEN);
     m_screenHeight = GetSystemMetrics(SM_CYSCREEN);
@@ -23,7 +25,7 @@ RainApplication::RainApplication(HINSTANCE hInstance) : m_hInstance(hInstance)
     g_pAppInstance = this;
 }
 
-RainApplication::~RainApplication()
+RainApp::~RainApp()
 {
     if (m_hook)
         UnhookWindowsHookEx(m_hook);
@@ -31,7 +33,7 @@ RainApplication::~RainApplication()
     g_pAppInstance = nullptr;
 }
 
-int RainApplication::Run()
+int RainApp::Run()
 {
     if (!InitializeWindow())
         return 0;
@@ -76,7 +78,7 @@ int RainApplication::Run()
     return 0;
 }
 
-void RainApplication::AddRaindrop()
+void RainApp::AddRaindrop()
 {
     std::uniform_int_distribution<> distX(0, m_screenWidth);
     std::uniform_real_distribution<> distDepth(0.4f, 1.0f);
@@ -89,7 +91,7 @@ void RainApplication::AddRaindrop()
         .depth = depth});
 }
 
-void RainApplication::Update(float dt)
+void RainApp::Update(float dt)
 {
     float windFactor = 0.0f;
     if (!m_raindrops.empty())
@@ -146,7 +148,7 @@ void RainApplication::Update(float dt)
     }
 }
 
-void RainApplication::SpawnSplash(float x)
+void RainApp::SpawnSplash(float x)
 {
     std::uniform_int_distribution<> distCount(3, 5);
     std::uniform_real_distribution<float> distAngle(0.0f, std::numbers::pi_v<float>);
@@ -170,7 +172,7 @@ void RainApplication::SpawnSplash(float x)
     }
 }
 
-void RainApplication::Render()
+void RainApp::Render()
 {
     if (!m_renderTarget)
     {
@@ -181,7 +183,7 @@ void RainApplication::Render()
 
     m_renderTarget->BeginDraw();
     m_renderTarget->SetAntialiasMode(D2D1_ANTIALIAS_MODE_ALIASED);
-    m_renderTarget->Clear(D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.0f));
+    m_renderTarget->Clear(D2D1::ColorF(1 / 255.0f, 0.0f, 1 / 255.0f, 1.0f));
 
     float baseR = GetRValue(m_rainColor) / 255.0f;
     float baseG = GetGValue(m_rainColor) / 255.0f;
@@ -217,17 +219,17 @@ void RainApplication::Render()
     }
 }
 
-bool RainApplication::InitializeWindow()
+bool RainApp::InitializeWindow()
 {
-    WNDCLASS wc = {};
+    WNDCLASSA wc = {};
     wc.lpfnWndProc = WindowProc;
     wc.hInstance = m_hInstance;
     wc.lpszClassName = Config::APP_NAME;
     wc.hbrBackground = nullptr;
 
-    RegisterClass(&wc);
+    RegisterClassA(&wc);
 
-    m_hwnd = CreateWindowEx(
+    m_hwnd = CreateWindowExA(
         WS_EX_LAYERED | WS_EX_TOPMOST | WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW,
         Config::APP_NAME, Config::APP_NAME,
         WS_POPUP, 0, 0, m_screenWidth, m_screenHeight,
@@ -236,12 +238,12 @@ bool RainApplication::InitializeWindow()
     if (!m_hwnd)
         return false;
 
-    SetLayeredWindowAttributes(m_hwnd, RGB(0, 0, 0), 0, LWA_COLORKEY);
+    SetLayeredWindowAttributes(m_hwnd, RGB(1, 0, 1), 0, LWA_COLORKEY);
     ShowWindow(m_hwnd, SW_SHOW);
     return true;
 }
 
-bool RainApplication::InitializeDirect2D()
+bool RainApp::InitializeDirect2D()
 {
     ID2D1Factory *rawFactory = nullptr;
     HRESULT hr = D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &rawFactory);
@@ -253,7 +255,7 @@ bool RainApplication::InitializeDirect2D()
     return false;
 }
 
-void RainApplication::CreateDeviceResources()
+void RainApp::CreateDeviceResources()
 {
     if (!m_renderTarget && m_hwnd)
     {
@@ -277,15 +279,15 @@ void RainApplication::CreateDeviceResources()
     }
 }
 
-void RainApplication::DiscardDeviceResources()
+void RainApp::DiscardDeviceResources()
 {
     m_renderTarget.reset();
     m_brush.reset();
 }
 
-void RainApplication::SetupTrayIcon()
+void RainApp::SetupTrayIcon()
 {
-    NOTIFYICONDATA nid = {};
+    NOTIFYICONDATAA nid = {};
     nid.cbSize = sizeof(NOTIFYICONDATA);
     nid.hWnd = m_hwnd;
     nid.uID = Config::TRAY_ICON_ID;
@@ -294,35 +296,35 @@ void RainApplication::SetupTrayIcon()
     nid.hIcon = LoadIcon(GetModuleHandle(NULL), MAKEINTRESOURCE(101));
     if (!nid.hIcon)
         nid.hIcon = LoadIcon(NULL, IDI_APPLICATION);
-    wcscpy_s(nid.szTip, Config::APP_NAME);
-    Shell_NotifyIcon(NIM_ADD, &nid);
+    strcpy_s(nid.szTip, Config::APP_NAME);
+    Shell_NotifyIconA(NIM_ADD, &nid);
 }
 
-void RainApplication::CleanupTrayIcon()
+void RainApp::CleanupTrayIcon()
 {
     if (m_hwnd)
     {
-        NOTIFYICONDATA nid = {};
-        nid.cbSize = sizeof(NOTIFYICONDATA);
+        NOTIFYICONDATAA nid = {};
+        nid.cbSize = sizeof(NOTIFYICONDATAA);
         nid.hWnd = m_hwnd;
         nid.uID = Config::TRAY_ICON_ID;
-        Shell_NotifyIcon(NIM_DELETE, &nid);
+        Shell_NotifyIconA(NIM_DELETE, &nid);
     }
 }
 
-LRESULT CALLBACK RainApplication::WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
+LRESULT CALLBACK RainApp::WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
-    RainApplication *pApp = nullptr;
+    RainApp *pApp = nullptr;
 
     if (uMsg == WM_CREATE)
     {
         CREATESTRUCT *pCreate = reinterpret_cast<CREATESTRUCT *>(lParam);
-        pApp = reinterpret_cast<RainApplication *>(pCreate->lpCreateParams);
+        pApp = reinterpret_cast<RainApp *>(pCreate->lpCreateParams);
         SetWindowLongPtr(hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(pApp));
     }
     else
     {
-        pApp = reinterpret_cast<RainApplication *>(GetWindowLongPtr(hwnd, GWLP_USERDATA));
+        pApp = reinterpret_cast<RainApp *>(GetWindowLongPtr(hwnd, GWLP_USERDATA));
     }
 
     if (pApp)
@@ -332,7 +334,7 @@ LRESULT CALLBACK RainApplication::WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam
     return DefWindowProc(hwnd, uMsg, wParam, lParam);
 }
 
-LRESULT RainApplication::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam)
+LRESULT RainApp::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
     switch (uMsg)
     {
@@ -341,12 +343,16 @@ LRESULT RainApplication::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam)
         {
             POINT pt;
             GetCursorPos(&pt);
-            HMENU hMenu = CreatePopupMenu();
 
-            AppendMenu(hMenu, m_autoRain ? MF_CHECKED : MF_STRING, 2, L"Auto Rain");
-            AppendMenu(hMenu, MF_STRING, 3, L"Choose Color");
-            AppendMenu(hMenu, MF_SEPARATOR, 0, NULL);
-            AppendMenu(hMenu, MF_STRING, 1, L"Exit");
+            auto menuText = std::format("{} v{}", Config::APP_NAME, Config::APP_VERSION);
+
+            HMENU hMenu = CreatePopupMenu();
+            AppendMenuA(hMenu, MF_STRING | MF_DISABLED | MF_GRAYED, 0, menuText.c_str());
+            AppendMenuA(hMenu, MF_SEPARATOR, 0, NULL);
+            AppendMenuA(hMenu, m_autoRain ? MF_CHECKED : MF_STRING, 2, "Auto Rain");
+            AppendMenuA(hMenu, MF_STRING, 3, "Choose Color");
+            AppendMenuA(hMenu, MF_SEPARATOR, 0, NULL);
+            AppendMenuA(hMenu, MF_STRING, 1, "Exit");
 
             SetForegroundWindow(m_hwnd);
 
@@ -388,20 +394,28 @@ LRESULT RainApplication::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam)
     return DefWindowProc(m_hwnd, uMsg, wParam, lParam);
 }
 
-LRESULT CALLBACK RainApplication::KeyboardProc(int nCode, WPARAM wParam, LPARAM lParam)
+LRESULT CALLBACK RainApp::KeyboardProc(int nCode, WPARAM wParam, LPARAM lParam)
 {
     if (nCode == HC_ACTION && wParam == WM_KEYDOWN)
     {
         KBDLLHOOKSTRUCT *pKey = reinterpret_cast<KBDLLHOOKSTRUCT *>(lParam);
-        bool isModifier = (pKey->vkCode == VK_SHIFT || pKey->vkCode == VK_CONTROL ||
-                           pKey->vkCode == VK_MENU || pKey->vkCode == VK_LSHIFT ||
-                           pKey->vkCode == VK_RSHIFT || pKey->vkCode == VK_LCONTROL ||
-                           pKey->vkCode == VK_RCONTROL || pKey->vkCode == VK_LMENU ||
-                           pKey->vkCode == VK_RMENU);
-
-        if (!isModifier && g_pAppInstance && !g_pAppInstance->m_autoRain)
+        switch (pKey->vkCode)
         {
-            g_pAppInstance->AddRaindrop();
+        case VK_SHIFT:
+        case VK_CONTROL:
+        case VK_MENU:
+        case VK_LSHIFT:
+        case VK_RSHIFT:
+        case VK_LCONTROL:
+        case VK_RCONTROL:
+        case VK_LMENU:
+        case VK_RMENU:
+            break;
+        default:
+            if (g_pAppInstance && !g_pAppInstance->m_autoRain)
+            {
+                g_pAppInstance->AddRaindrop();
+            }
         }
     }
     return CallNextHookEx(NULL, nCode, wParam, lParam);
