@@ -128,8 +128,6 @@ void RainApp::AddMatrixColumn()
     std::uniform_real_distribution<float> distInterval(Config::MATRIX_JUMP_INTERVAL_MIN, Config::MATRIX_JUMP_INTERVAL_MAX);
 
     int gridX = distX(m_gen);
-
-    // Check if column already exists at this grid position
     for (const auto &col : m_matrixColumns)
     {
         if (col.gridX == gridX && col.active)
@@ -138,12 +136,11 @@ void RainApp::AddMatrixColumn()
 
     MatrixColumn newCol{};
     newCol.gridX = gridX;
-    newCol.gridY = -1; // Start above screen
+    newCol.gridY = -1;
     newCol.jumpInterval = distInterval(m_gen);
     newCol.jumpTimer = 0.0f;
     newCol.active = true;
 
-    // Initialize all chars with random characters
     for (int i = 0; i < Config::MATRIX_TRAIL_LENGTH; ++i)
     {
         newCol.chars[i] = GetRandomMatrixChar();
@@ -154,7 +151,6 @@ void RainApp::AddMatrixColumn()
 
 wchar_t RainApp::GetRandomMatrixChar()
 {
-    // Mix of Katakana, Latin characters, and numbers for Matrix effect
     static const wchar_t matrixChars[] =
         L"アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワヲン"
         L"ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789@#$%&*";
@@ -262,22 +258,18 @@ void RainApp::UpdateSnow(float dt)
         }
         else
         {
-            // Gentle swaying motion
             float sway = Config::SNOW_SWAY_AMPLITUDE * std::sin(elapsedTime * Config::SNOW_SWAY_FREQUENCY + flake.swayOffset);
             flake.x += sway * dt * flake.depth;
             flake.y += flake.speed * dt;
 
-            // Decrease lifetime and size during fall
             flake.lifetime -= dt;
             float lifetimeRatio = flake.lifetime / flake.maxLifetime;
             flake.size = flake.baseSize * (0.3f + 0.7f * lifetimeRatio);
 
-            // Check if hit ground or lifetime expired
             if (flake.y >= m_screenHeight - flake.size)
             {
                 if (flake.lifetime > 0.5f)
                 {
-                    // Hit ground with remaining lifetime - stay on ground
                     flake.onGround = true;
                     flake.y = m_screenHeight - flake.size;
                     flake.groundTimer = 0.0f;
@@ -323,18 +315,15 @@ void RainApp::UpdateMatrix(float dt)
         {
             col.jumpTimer = 0.0f;
 
-            // Cascade: shift characters down (last takes previous, etc.)
             for (int i = Config::MATRIX_TRAIL_LENGTH - 1; i > 0; --i)
             {
                 col.chars[i] = col.chars[i - 1];
             }
-            // Head gets a new random character
+
             col.chars[0] = GetRandomMatrixChar();
 
-            // Move head down one grid cell
             col.gridY++;
 
-            // Check if entire trail is off screen
             int trailTop = col.gridY - (Config::MATRIX_TRAIL_LENGTH - 1);
             if (trailTop > maxRows)
             {
@@ -388,7 +377,6 @@ void RainApp::Render()
     m_renderTarget->BeginDraw();
     m_renderTarget->SetAntialiasMode(D2D1_ANTIALIAS_MODE_ALIASED);
 
-    // Use transparent background for all modes
     m_renderTarget->Clear(D2D1::ColorF(1 / 255.0f, 0.0f, 1 / 255.0f, 1.0f));
 
     switch (m_currentMode)
@@ -488,11 +476,9 @@ void RainApp::RenderMatrix()
             int gridRow = col.gridY - i;
             float pixelY = static_cast<float>(gridRow * Config::MATRIX_CHAR_SIZE);
 
-            // Skip if off screen
             if (pixelY < -Config::MATRIX_CHAR_SIZE || pixelY > m_screenHeight)
                 continue;
 
-            // Calculate fade based on position in trail (0 = head, 5 = tail)
             float fade;
             if (i == 0)
             {
@@ -500,12 +486,10 @@ void RainApp::RenderMatrix()
             }
             else
             {
-                // Fade from 1.0 to 0.0 over the trail length
                 fade = 1.0f - (static_cast<float>(i) / (Config::MATRIX_TRAIL_LENGTH + Config::MATRIX_TRAIL_LENGTH / 1.5));
                 fade = std::max(0.15f, fade);
             }
 
-            // Skip rendering if fully faded
             if (fade <= 0.0f)
                 continue;
 
@@ -515,10 +499,8 @@ void RainApp::RenderMatrix()
                 pixelX + Config::MATRIX_CHAR_SIZE,
                 pixelY + Config::MATRIX_CHAR_SIZE};
 
-            // Set color for the character
             if (i == 0)
             {
-                // Head - bright white/green
                 m_brush->SetColor(D2D1::ColorF(
                     std::min(1.0f, baseR + 0.8f),
                     std::min(1.0f, baseG + 0.8f),
@@ -582,7 +564,6 @@ bool RainApp::InitializeDirect2D()
 
     m_d2dFactory.reset(rawFactory);
 
-    // Create DirectWrite factory for Matrix mode text
     IDWriteFactory *rawDWriteFactory = nullptr;
     hr = DWriteCreateFactory(
         DWRITE_FACTORY_TYPE_SHARED,
@@ -594,7 +575,6 @@ bool RainApp::InitializeDirect2D()
 
     m_dwriteFactory.reset(rawDWriteFactory);
 
-    // Create text format for Matrix characters
     IDWriteTextFormat *rawTextFormat = nullptr;
     hr = m_dwriteFactory->CreateTextFormat(
         L"Consolas",
@@ -746,7 +726,6 @@ LRESULT RainApp::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam)
             cc.hwndOwner = m_hwnd;
             cc.lpCustColors = m_customColors;
 
-            // Set initial color based on current mode
             switch (m_currentMode)
             {
             case Config::AppMode::Rain:
