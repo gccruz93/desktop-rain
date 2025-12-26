@@ -21,6 +21,8 @@ RainApp::RainApp(HINSTANCE hInstance) : m_hInstance(hInstance)
 
     m_raindrops.reserve(Config::MAX_RAINDROPS);
     m_particles.reserve(Config::MAX_PARTICLES);
+    m_snowflakes.reserve(Config::MAX_SNOWFLAKES);
+    m_matrixColumns.reserve(Config::MAX_MATRIX_COLUMNS);
 
     g_pAppInstance = this;
 }
@@ -65,7 +67,9 @@ int RainApp::Run()
             Update(dt);
             Render();
 
-            if (m_raindrops.empty() && m_particles.empty())
+            bool hasActiveElements = !m_raindrops.empty() || !m_particles.empty() ||
+                                     !m_snowflakes.empty() || !m_matrixColumns.empty();
+            if (!hasActiveElements)
             {
                 WaitMessage();
             }
@@ -91,7 +95,92 @@ void RainApp::AddRaindrop()
         .depth = depth});
 }
 
+void RainApp::AddSnowflake()
+{
+    std::uniform_int_distribution<> distX(0, m_screenWidth);
+    std::uniform_real_distribution<float> distDepth(0.3f, 1.0f);
+    std::uniform_real_distribution<float> distSize(Config::SNOW_MIN_SIZE, Config::SNOW_MAX_SIZE);
+    std::uniform_real_distribution<float> distLifetime(Config::SNOW_LIFETIME_MIN, Config::SNOW_LIFETIME_MAX);
+    std::uniform_real_distribution<float> distSway(0.0f, 2.0f * std::numbers::pi_v<float>);
+
+    float depth = distDepth(m_gen);
+    float size = distSize(m_gen) * depth;
+    float lifetime = distLifetime(m_gen);
+
+    m_snowflakes.emplace_back(Snowflake{
+        .x = static_cast<float>(distX(m_gen)),
+        .y = -20.0f,
+        .size = size,
+        .baseSize = size,
+        .speed = Config::SNOW_BASE_SPEED * depth,
+        .swayOffset = distSway(m_gen),
+        .lifetime = lifetime,
+        .maxLifetime = lifetime,
+        .depth = depth,
+        .onGround = false,
+        .groundTimer = 0.0f});
+}
+
+void RainApp::AddMatrixColumn()
+{
+    int maxColumns = m_screenWidth / Config::MATRIX_CHAR_SIZE;
+    std::uniform_int_distribution<> distX(0, maxColumns - 1);
+    std::uniform_real_distribution<float> distInterval(Config::MATRIX_JUMP_INTERVAL_MIN, Config::MATRIX_JUMP_INTERVAL_MAX);
+
+    int gridX = distX(m_gen);
+
+    // Check if column already exists at this grid position
+    for (const auto &col : m_matrixColumns)
+    {
+        if (col.gridX == gridX && col.active)
+            return;
+    }
+
+    MatrixColumn newCol{};
+    newCol.gridX = gridX;
+    newCol.gridY = -1; // Start above screen
+    newCol.jumpInterval = distInterval(m_gen);
+    newCol.jumpTimer = 0.0f;
+    newCol.active = true;
+
+    // Initialize all chars with random characters
+    for (int i = 0; i < Config::MATRIX_TRAIL_LENGTH; ++i)
+    {
+        newCol.chars[i] = GetRandomMatrixChar();
+    }
+
+    m_matrixColumns.push_back(newCol);
+}
+
+wchar_t RainApp::GetRandomMatrixChar()
+{
+    // Mix of Katakana, Latin characters, and numbers for Matrix effect
+    static const wchar_t matrixChars[] =
+        L"アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワヲン"
+        L"ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789@#$%&*";
+    static const int charCount = sizeof(matrixChars) / sizeof(wchar_t) - 1;
+
+    std::uniform_int_distribution<> dist(0, charCount - 1);
+    return matrixChars[dist(m_gen)];
+}
+
 void RainApp::Update(float dt)
+{
+    switch (m_currentMode)
+    {
+    case Config::AppMode::Rain:
+        UpdateRain(dt);
+        break;
+    case Config::AppMode::Snow:
+        UpdateSnow(dt);
+        break;
+    case Config::AppMode::Matrix:
+        UpdateMatrix(dt);
+        break;
+    }
+}
+
+void RainApp::UpdateRain(float dt)
 {
     float windFactor = 0.0f;
     if (!m_raindrops.empty())
@@ -101,7 +190,7 @@ void RainApp::Update(float dt)
         windFactor = (static_cast<float>(mousePos.x) - (m_screenWidth / 2.0f)) / (m_screenWidth / 2.0f);
     }
 
-    if (m_autoRain)
+    if (m_autoMode)
     {
         static float autoRainTimer = 0.0f;
         autoRainTimer += dt;
@@ -119,7 +208,7 @@ void RainApp::Update(float dt)
 
         if (drop.y > m_screenHeight)
         {
-            SpawnSplash(drop.x);
+            SpawnRainSplash(drop.x);
         }
     }
 
@@ -139,7 +228,7 @@ void RainApp::Update(float dt)
         p.lifetime -= dt;
     }
 
-    std::erase_if(m_particles, [](const Particle &p)
+    std::erase_if(m_particles, [](const RainSplash &p)
                   { return p.lifetime <= 0.0f; });
 
     if (m_particles.size() > Config::MAX_PARTICLES)
@@ -148,7 +237,122 @@ void RainApp::Update(float dt)
     }
 }
 
-void RainApp::SpawnSplash(float x)
+void RainApp::UpdateSnow(float dt)
+{
+    static float elapsedTime = 0.0f;
+    elapsedTime += dt;
+
+    if (m_autoMode)
+    {
+        static float autoSnowTimer = 0.0f;
+        autoSnowTimer += dt;
+        if (autoSnowTimer >= 0.1f)
+        {
+            AddSnowflake();
+            autoSnowTimer = 0.0f;
+        }
+    }
+
+    for (auto &flake : m_snowflakes)
+    {
+        if (flake.onGround)
+        {
+            flake.groundTimer += dt;
+            flake.size = flake.baseSize * (1.0f - (flake.groundTimer / Config::SNOW_GROUND_DURATION));
+        }
+        else
+        {
+            // Gentle swaying motion
+            float sway = Config::SNOW_SWAY_AMPLITUDE * std::sin(elapsedTime * Config::SNOW_SWAY_FREQUENCY + flake.swayOffset);
+            flake.x += sway * dt * flake.depth;
+            flake.y += flake.speed * dt;
+
+            // Decrease lifetime and size during fall
+            flake.lifetime -= dt;
+            float lifetimeRatio = flake.lifetime / flake.maxLifetime;
+            flake.size = flake.baseSize * (0.3f + 0.7f * lifetimeRatio);
+
+            // Check if hit ground or lifetime expired
+            if (flake.y >= m_screenHeight - flake.size)
+            {
+                if (flake.lifetime > 0.5f)
+                {
+                    // Hit ground with remaining lifetime - stay on ground
+                    flake.onGround = true;
+                    flake.y = m_screenHeight - flake.size;
+                    flake.groundTimer = 0.0f;
+                }
+            }
+        }
+    }
+
+    std::erase_if(m_snowflakes, [](const Snowflake &s)
+                  { 
+                      if (s.onGround)
+                          return s.groundTimer >= Config::SNOW_GROUND_DURATION;
+                      return s.lifetime <= 0.0f || s.size < 0.5f; });
+
+    if (m_snowflakes.size() > Config::MAX_SNOWFLAKES)
+    {
+        m_snowflakes.erase(m_snowflakes.begin(), m_snowflakes.begin() + (m_snowflakes.size() - Config::MAX_SNOWFLAKES));
+    }
+}
+
+void RainApp::UpdateMatrix(float dt)
+{
+    if (m_autoMode)
+    {
+        static float autoMatrixTimer = 0.0f;
+        autoMatrixTimer += dt;
+        if (autoMatrixTimer >= 0.05f)
+        {
+            AddMatrixColumn();
+            autoMatrixTimer = 0.0f;
+        }
+    }
+
+    int maxRows = m_screenHeight / Config::MATRIX_CHAR_SIZE;
+
+    for (auto &col : m_matrixColumns)
+    {
+        if (!col.active)
+            continue;
+
+        col.jumpTimer += dt;
+        if (col.jumpTimer >= col.jumpInterval)
+        {
+            col.jumpTimer = 0.0f;
+
+            // Cascade: shift characters down (last takes previous, etc.)
+            for (int i = Config::MATRIX_TRAIL_LENGTH - 1; i > 0; --i)
+            {
+                col.chars[i] = col.chars[i - 1];
+            }
+            // Head gets a new random character
+            col.chars[0] = GetRandomMatrixChar();
+
+            // Move head down one grid cell
+            col.gridY++;
+
+            // Check if entire trail is off screen
+            int trailTop = col.gridY - (Config::MATRIX_TRAIL_LENGTH - 1);
+            if (trailTop > maxRows)
+            {
+                col.active = false;
+            }
+        }
+    }
+
+    std::erase_if(m_matrixColumns, [](const MatrixColumn &c)
+                  { return !c.active; });
+
+    if (m_matrixColumns.size() > Config::MAX_MATRIX_COLUMNS)
+    {
+        m_matrixColumns.erase(m_matrixColumns.begin(), m_matrixColumns.begin() + (m_matrixColumns.size() - Config::MAX_MATRIX_COLUMNS));
+    }
+}
+
+void RainApp::SpawnRainSplash(float x)
 {
     std::uniform_int_distribution<> distCount(3, 5);
     std::uniform_real_distribution<float> distAngle(0.0f, std::numbers::pi_v<float>);
@@ -161,7 +365,7 @@ void RainApp::SpawnSplash(float x)
         float angle = distAngle(m_gen);
         float speed = distSpeed(m_gen);
 
-        m_particles.emplace_back(Particle{
+        m_particles.emplace_back(RainSplash{
             .x = x,
             .y = static_cast<float>(m_screenHeight - 1),
             .vx = std::cos(angle) * speed,
@@ -183,8 +387,32 @@ void RainApp::Render()
 
     m_renderTarget->BeginDraw();
     m_renderTarget->SetAntialiasMode(D2D1_ANTIALIAS_MODE_ALIASED);
+
+    // Use transparent background for all modes
     m_renderTarget->Clear(D2D1::ColorF(1 / 255.0f, 0.0f, 1 / 255.0f, 1.0f));
 
+    switch (m_currentMode)
+    {
+    case Config::AppMode::Rain:
+        RenderRain();
+        break;
+    case Config::AppMode::Snow:
+        RenderSnow();
+        break;
+    case Config::AppMode::Matrix:
+        RenderMatrix();
+        break;
+    }
+
+    HRESULT hr = m_renderTarget->EndDraw();
+    if (hr == D2DERR_RECREATE_TARGET)
+    {
+        DiscardDeviceResources();
+    }
+}
+
+void RainApp::RenderRain()
+{
     float baseR = GetRValue(m_rainColor) / 255.0f;
     float baseG = GetGValue(m_rainColor) / 255.0f;
     float baseB = GetBValue(m_rainColor) / 255.0f;
@@ -211,12 +439,114 @@ void RainApp::Render()
         D2D1_POINT_2F end = {p.x, p.y + 2.0f};
         m_renderTarget->DrawLine(start, end, m_brush.get(), 1.0f);
     }
+}
 
-    HRESULT hr = m_renderTarget->EndDraw();
-    if (hr == D2DERR_RECREATE_TARGET)
+void RainApp::RenderSnow()
+{
+    float baseR = GetRValue(m_snowColor) / 255.0f;
+    float baseG = GetGValue(m_snowColor) / 255.0f;
+    float baseB = GetBValue(m_snowColor) / 255.0f;
+
+    m_renderTarget->SetAntialiasMode(D2D1_ANTIALIAS_MODE_PER_PRIMITIVE);
+
+    for (const auto &flake : m_snowflakes)
     {
-        DiscardDeviceResources();
+        float alpha = flake.depth;
+        if (flake.onGround)
+        {
+            alpha *= (1.0f - (flake.groundTimer / Config::SNOW_GROUND_DURATION));
+        }
+
+        m_brush->SetColor(D2D1::ColorF(baseR, baseG, baseB, alpha));
+
+        D2D1_ELLIPSE ellipse = {
+            {flake.x, flake.y},
+            flake.size,
+            flake.size};
+        m_renderTarget->FillEllipse(ellipse, m_brush.get());
     }
+}
+
+void RainApp::RenderMatrix()
+{
+    if (!m_matrixTextFormat)
+        return;
+
+    float baseR = GetRValue(m_matrixColor) / 255.0f;
+    float baseG = GetGValue(m_matrixColor) / 255.0f;
+    float baseB = GetBValue(m_matrixColor) / 255.0f;
+
+    for (const auto &col : m_matrixColumns)
+    {
+        if (!col.active)
+            continue;
+
+        float pixelX = static_cast<float>(col.gridX * Config::MATRIX_CHAR_SIZE);
+
+        for (int i = 0; i < Config::MATRIX_TRAIL_LENGTH; ++i)
+        {
+            int gridRow = col.gridY - i;
+            float pixelY = static_cast<float>(gridRow * Config::MATRIX_CHAR_SIZE);
+
+            // Skip if off screen
+            if (pixelY < -Config::MATRIX_CHAR_SIZE || pixelY > m_screenHeight)
+                continue;
+
+            // Calculate fade based on position in trail (0 = head, 5 = tail)
+            float fade;
+            if (i == 0)
+            {
+                fade = 1.0f;
+            }
+            else
+            {
+                // Fade from 1.0 to 0.0 over the trail length
+                fade = 1.0f - (static_cast<float>(i) / (Config::MATRIX_TRAIL_LENGTH + Config::MATRIX_TRAIL_LENGTH / 1.5));
+                fade = std::max(0.15f, fade);
+            }
+
+            // Skip rendering if fully faded
+            if (fade <= 0.0f)
+                continue;
+
+            D2D1_RECT_F rect = {
+                pixelX,
+                pixelY,
+                pixelX + Config::MATRIX_CHAR_SIZE,
+                pixelY + Config::MATRIX_CHAR_SIZE};
+
+            // Set color for the character
+            if (i == 0)
+            {
+                // Head - bright white/green
+                m_brush->SetColor(D2D1::ColorF(
+                    std::min(1.0f, baseR + 0.8f),
+                    std::min(1.0f, baseG + 0.8f),
+                    std::min(1.0f, baseB + 0.8f),
+                    1.0f));
+            }
+            else
+            {
+                m_brush->SetColor(D2D1::ColorF(baseR * fade, baseG * fade, baseB * fade, fade));
+            }
+
+            wchar_t ch[2] = {col.chars[i], L'\0'};
+            m_renderTarget->DrawText(
+                ch,
+                1,
+                m_matrixTextFormat.get(),
+                rect,
+                m_brush.get());
+        }
+    }
+}
+
+void RainApp::Clear()
+{
+    m_raindrops.clear();
+    m_snowflakes.clear();
+    m_matrixColumns.clear();
+    m_particles.clear();
 }
 
 bool RainApp::InitializeWindow()
@@ -247,12 +577,43 @@ bool RainApp::InitializeDirect2D()
 {
     ID2D1Factory *rawFactory = nullptr;
     HRESULT hr = D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &rawFactory);
+    if (FAILED(hr))
+        return false;
+
+    m_d2dFactory.reset(rawFactory);
+
+    // Create DirectWrite factory for Matrix mode text
+    IDWriteFactory *rawDWriteFactory = nullptr;
+    hr = DWriteCreateFactory(
+        DWRITE_FACTORY_TYPE_SHARED,
+        __uuidof(IDWriteFactory),
+        reinterpret_cast<IUnknown **>(&rawDWriteFactory));
+
+    if (FAILED(hr))
+        return false;
+
+    m_dwriteFactory.reset(rawDWriteFactory);
+
+    // Create text format for Matrix characters
+    IDWriteTextFormat *rawTextFormat = nullptr;
+    hr = m_dwriteFactory->CreateTextFormat(
+        L"Consolas",
+        nullptr,
+        DWRITE_FONT_WEIGHT_BOLD,
+        DWRITE_FONT_STYLE_NORMAL,
+        DWRITE_FONT_STRETCH_NORMAL,
+        static_cast<float>(Config::MATRIX_CHAR_SIZE),
+        L"en-us",
+        &rawTextFormat);
+
     if (SUCCEEDED(hr))
     {
-        m_d2dFactory.reset(rawFactory);
-        return true;
+        m_matrixTextFormat.reset(rawTextFormat);
+        m_matrixTextFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
+        m_matrixTextFormat->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
     }
-    return false;
+
+    return true;
 }
 
 void RainApp::CreateDeviceResources()
@@ -347,9 +708,18 @@ LRESULT RainApp::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam)
             auto menuText = std::format("{} v{}", Config::APP_NAME, Config::APP_VERSION);
 
             HMENU hMenu = CreatePopupMenu();
+            HMENU hModeMenu = CreatePopupMenu();
+
             AppendMenuA(hMenu, MF_STRING | MF_DISABLED | MF_GRAYED, 0, menuText.c_str());
             AppendMenuA(hMenu, MF_SEPARATOR, 0, NULL);
-            AppendMenuA(hMenu, m_autoRain ? MF_CHECKED : MF_STRING, 2, "Auto Rain");
+
+            // Submenu Modes
+            AppendMenuA(hModeMenu, (m_currentMode == Config::AppMode::Rain) ? MF_CHECKED : MF_STRING, 10, "Rain");
+            AppendMenuA(hModeMenu, (m_currentMode == Config::AppMode::Snow) ? MF_CHECKED : MF_STRING, 11, "Snow");
+            AppendMenuA(hModeMenu, (m_currentMode == Config::AppMode::Matrix) ? MF_CHECKED : MF_STRING, 12, "Matrix");
+            AppendMenuA(hMenu, MF_POPUP, (UINT_PTR)hModeMenu, "Mode");
+
+            AppendMenuA(hMenu, m_autoMode ? MF_CHECKED : MF_STRING, 2, "Auto Mode");
             AppendMenuA(hMenu, MF_STRING, 3, "Choose Color");
             AppendMenuA(hMenu, MF_SEPARATOR, 0, NULL);
             AppendMenuA(hMenu, MF_STRING, 1, "Exit");
@@ -361,31 +731,66 @@ LRESULT RainApp::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam)
         }
         return 0;
     case WM_COMMAND:
-        if (LOWORD(wParam) == 2) // Toggle Auto Rain
+        switch (LOWORD(wParam))
         {
-            m_autoRain = !m_autoRain;
-        }
-        else if (LOWORD(wParam) == 3) // Choose Color
+        case 1: // Exit
+            PostMessage(m_hwnd, WM_QUIT, 0, 0);
+            break;
+        case 2: // Toggle Auto Mode
+            m_autoMode = !m_autoMode;
+            break;
+        case 3: // Choose Color
         {
             CHOOSECOLOR cc = {0};
             cc.lStructSize = sizeof(cc);
             cc.hwndOwner = m_hwnd;
             cc.lpCustColors = m_customColors;
-            cc.rgbResult = m_rainColor;
+
+            // Set initial color based on current mode
+            switch (m_currentMode)
+            {
+            case Config::AppMode::Rain:
+                cc.rgbResult = m_rainColor;
+                break;
+            case Config::AppMode::Snow:
+                cc.rgbResult = m_snowColor;
+                break;
+            case Config::AppMode::Matrix:
+                cc.rgbResult = m_matrixColor;
+                break;
+            }
             cc.Flags = CC_FULLOPEN | CC_RGBINIT;
 
             if (ChooseColor(&cc))
             {
-                m_rainColor = cc.rgbResult;
+                switch (m_currentMode)
+                {
+                case Config::AppMode::Rain:
+                    m_rainColor = cc.rgbResult;
+                    break;
+                case Config::AppMode::Snow:
+                    m_snowColor = cc.rgbResult;
+                    break;
+                case Config::AppMode::Matrix:
+                    m_matrixColor = cc.rgbResult;
+                    break;
+                }
             }
+            break;
         }
-        else if (LOWORD(wParam) == 1) // Exit
-        {
-            PostMessage(m_hwnd, WM_QUIT, 0, 0);
+        case 10: // Rain mode
+            m_currentMode = Config::AppMode::Rain;
+            Clear();
+            break;
+        case 11: // Snow mode
+            m_currentMode = Config::AppMode::Snow;
+            Clear();
+            break;
+        case 12: // Matrix mode
+            m_currentMode = Config::AppMode::Matrix;
+            Clear();
+            break;
         }
-        return 0;
-    case Config::WM_APP_CREATE_RAINDROP:
-        AddRaindrop();
         return 0;
     case WM_DESTROY:
         PostQuitMessage(0);
@@ -412,9 +817,20 @@ LRESULT CALLBACK RainApp::KeyboardProc(int nCode, WPARAM wParam, LPARAM lParam)
         case VK_RMENU:
             break;
         default:
-            if (g_pAppInstance && !g_pAppInstance->m_autoRain)
+            if (g_pAppInstance && !g_pAppInstance->m_autoMode)
             {
-                g_pAppInstance->AddRaindrop();
+                switch (g_pAppInstance->m_currentMode)
+                {
+                case Config::AppMode::Rain:
+                    g_pAppInstance->AddRaindrop();
+                    break;
+                case Config::AppMode::Snow:
+                    g_pAppInstance->AddSnowflake();
+                    break;
+                case Config::AppMode::Matrix:
+                    g_pAppInstance->AddMatrixColumn();
+                    break;
+                }
             }
         }
     }

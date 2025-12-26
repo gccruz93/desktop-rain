@@ -13,7 +13,7 @@ if not exist "%OUTPUT_DIR%" (
 
 set SOURCES=src\*.cpp
 set OUTPUT="%OUTPUT_DIR%\Desktop Rain.exe"
-set LIBS=-lgdi32 -ld2d1 -lole32 -luuid -lcomdlg32 -lshell32
+set LIBS=-lgdi32 -ld2d1 -ldwrite -lole32 -luuid -lcomdlg32 -lshell32
 set RES_OBJ=
 
 if exist resources.rc (
@@ -23,11 +23,11 @@ if exist resources.rc (
 )
 
 if /I "%MODE%"=="release" (
-    set FLAGS=-O2 -std=c++23 -mwindows -municode -s -DNDEBUG -DUNICODE -D_UNICODE
-    echo Building Release configuration...
+    set FLAGS=-O3 -std=c++23 -mwindows -municode -s -DNDEBUG -DUNICODE -D_UNICODE
+    echo Building Release...
 ) else (
     set FLAGS=-g -std=c++23 -Wall -mwindows -municode -DUNICODE -D_UNICODE
-    echo Building Debug configuration...
+    echo Building Debug...
 )
 
 echo g++ %SOURCES% %RES_OBJ% -o %OUTPUT% %FLAGS% %LIBS%

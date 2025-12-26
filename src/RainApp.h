@@ -1,6 +1,7 @@
 #pragma once
 #include <windows.h>
 #include <d2d1.h>
+#include <dwrite.h>
 #include <vector>
 #include <random>
 #include <memory>
@@ -27,10 +28,15 @@ public:
 
     int Run();
     void AddRaindrop();
+    void AddSnowflake();
+    void AddMatrixColumn();
 
     // Customization
-    bool m_autoRain = false;
+    bool m_autoMode = false;
+    Config::AppMode m_currentMode = Config::AppMode::Rain;
     COLORREF m_rainColor = RGB(255, 255, 255);
+    COLORREF m_snowColor = RGB(255, 255, 255);
+    COLORREF m_matrixColor = RGB(0, 255, 70);
     COLORREF m_customColors[16] = {0};
 
 private:
@@ -46,17 +52,38 @@ private:
     ComPtr<ID2D1Factory> m_d2dFactory;
     ComPtr<ID2D1HwndRenderTarget> m_renderTarget;
     ComPtr<ID2D1SolidColorBrush> m_brush;
+    ComPtr<IDWriteFactory> m_dwriteFactory;
+    ComPtr<IDWriteTextFormat> m_matrixTextFormat;
 
-    // Simulation
+    // Rain
     std::vector<Raindrop> m_raindrops;
-    std::vector<Particle> m_particles;
-    std::mt19937 m_gen;
+    std::vector<RainSplash> m_particles;
     float m_raindropSpeedY;
+
+    // Snow
+    std::vector<Snowflake> m_snowflakes;
+
+    // Matrix
+    std::vector<MatrixColumn> m_matrixColumns;
+
+    // Utils
+    std::mt19937 m_gen;
 
     // Methods
     void Update(float dt);
+    void UpdateRain(float dt);
+    void UpdateSnow(float dt);
+    void UpdateMatrix(float dt);
+
     void Render();
-    void SpawnSplash(float x);
+    void RenderRain();
+    void RenderSnow();
+    void RenderMatrix();
+
+    void Clear();
+
+    void SpawnRainSplash(float x);
+    wchar_t GetRandomMatrixChar();
 
     bool InitializeWindow();
     bool InitializeDirect2D();
