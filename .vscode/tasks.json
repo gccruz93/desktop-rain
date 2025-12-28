@@ -12,9 +12,6 @@
                 "kind": "build",
                 "isDefault": true
             },
-            "problemMatcher": [
-                "$gcc"
-            ],
             "detail": "Compiles in Debug mode using build.bat (with console)"
         },
         {
@@ -25,9 +22,6 @@
                 "release"
             ],
             "group": "build",
-            "problemMatcher": [
-                "$gcc"
-            ],
             "detail": "Compiles in Release mode using build.bat"
         }
     ]
