@@ -41,6 +41,10 @@ private:
     MonitorTarget            m_monitorTarget        = MonitorTarget::Active;
     int                      m_selectedMonitorIndex = 0;
 
+    // Cached foreground window for Active monitor mode
+    HWND m_cachedFgWindow = nullptr;
+    RECT m_cachedFgRect   = {};
+
     // Rendering
     ComPtr<ID2D1Factory>          m_d2dFactory;
     ComPtr<ID2D1HwndRenderTarget> m_renderTarget;
@@ -62,7 +66,7 @@ private:
     void DiscardDeviceResources();
 
     void EnumerateMonitors();
-    RECT GetAutoSpawnRect() const;
+    RECT GetAutoSpawnRect();
     void AddElementForTarget();
 
     void SetupTrayIcon();

@@ -4,6 +4,7 @@
 #include "modes/MatrixMode.h"
 #include <shellapi.h>
 #include <commdlg.h>
+#include <dwmapi.h>
 #include <chrono>
 #include <format>
 
@@ -52,35 +53,44 @@ int RainApp::Run()
 
     while (m_running)
     {
-        if (PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE))
+        // Drain all pending messages before rendering
+        while (PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE))
         {
             if (msg.message == WM_QUIT)
-            {
                 m_running = false;
-            }
             TranslateMessage(&msg);
             DispatchMessage(&msg);
         }
-        else
+
+        if (!m_running)
+            break;
+
+        if (m_modeManager->HasActiveElements())
         {
-            auto currentTime = std::chrono::high_resolution_clock::now();
-            std::chrono::duration<float> diff = currentTime - lastTime;
+            // Sync to DWM's VBlank — blocks until the compositor's next frame.
+            // Correct pacing for layered windows spanning multiple monitors:
+            // HwndRenderTarget's implicit VSync ties to one monitor and can
+            // misbehave on a virtual screen. DwmFlush() always syncs to the
+            // actual display VBlank regardless of window geometry.
+            // Pair with D2D1_PRESENT_OPTIONS_IMMEDIATELY in CreateDeviceResources
+            // so EndDraw() submits GPU work without its own VSync blocking.
+            DwmFlush();
+
+            auto now = std::chrono::high_resolution_clock::now();
+            std::chrono::duration<float> diff = now - lastTime;
             float dt = diff.count();
-            lastTime = currentTime;
+            lastTime = now;
 
             Update(dt);
             Render();
-
-            if (m_modeManager->HasActiveElements())
-            {
-                InvalidateRect(m_hwnd, NULL, FALSE);
-            }
-            else
-            {
-                WaitMessage();
-            }
+        }
+        else
+        {
+            WaitMessage();
+            lastTime = std::chrono::high_resolution_clock::now();
         }
     }
+
     return 0;
 }
 
@@ -172,7 +182,7 @@ void RainApp::EnumerateMonitors()
     EnumDisplayMonitors(nullptr, nullptr, MonitorEnumProc, reinterpret_cast<LPARAM>(this));
 }
 
-RECT RainApp::GetAutoSpawnRect() const
+RECT RainApp::GetAutoSpawnRect()
 {
     RECT fullVirtual = {0, 0, m_virtualW, m_virtualH};
 
@@ -189,11 +199,22 @@ RECT RainApp::GetAutoSpawnRect() const
         HWND fgWnd = GetForegroundWindow();
         if (!fgWnd)
             return fullVirtual;
-        HMONITOR hMon = MonitorFromWindow(fgWnd, MONITOR_DEFAULTTONEAREST);
-        for (const auto &mon : m_monitors)
-            if (mon.handle == hMon)
-                return mon.d2dRect;
-        return fullVirtual;
+        // Cache result: only re-query when foreground window changes
+        if (fgWnd != m_cachedFgWindow)
+        {
+            m_cachedFgWindow = fgWnd;
+            HMONITOR hMon = MonitorFromWindow(fgWnd, MONITOR_DEFAULTTONEAREST);
+            m_cachedFgRect = fullVirtual;
+            for (const auto &mon : m_monitors)
+            {
+                if (mon.handle == hMon)
+                {
+                    m_cachedFgRect = mon.d2dRect;
+                    break;
+                }
+            }
+        }
+        return m_cachedFgRect;
     }
 
     case MonitorTarget::Specific:
@@ -305,7 +326,7 @@ void RainApp::CreateDeviceResources()
         ID2D1HwndRenderTarget *rawRT = nullptr;
         HRESULT hr = m_d2dFactory->CreateHwndRenderTarget(
             D2D1::RenderTargetProperties(),
-            D2D1::HwndRenderTargetProperties(m_hwnd, size),
+            D2D1::HwndRenderTargetProperties(m_hwnd, size, D2D1_PRESENT_OPTIONS_IMMEDIATELY),
             &rawRT);
 
         if (SUCCEEDED(hr))

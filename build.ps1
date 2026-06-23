@@ -28,7 +28,7 @@ if (-not (Test-Path $OutputDir)) {
 
 $Sources  = @("src\*.cpp", "src\modes\*.cpp")
 $Output   = "$OutputDir\Desktop Rain.exe"
-$Libs     = "-lgdi32 -ld2d1 -ldwrite -lole32 -luuid -lcomdlg32 -lshell32"
+$Libs     = "-lgdi32 -ld2d1 -ldwrite -lole32 -luuid -lcomdlg32 -lshell32 -lwinmm -ldwmapi"
 $ResObj   = $null
 
 if (Test-Path "resources.rc") {
