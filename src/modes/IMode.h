@@ -26,12 +26,15 @@ public:
 
     virtual void Configure(void *configData) {}
 
+    void SetSpawnRegion(const RECT &r) { m_spawnRegion = r; }
+
 protected:
     void UpdateAutoSpawn(float dt, float interval);
 
     int m_screenWidth;
     int m_screenHeight;
     bool m_autoMode = false;
+    RECT m_spawnRegion{};
 
 private:
     float m_autoSpawnTimer = 0.0f;

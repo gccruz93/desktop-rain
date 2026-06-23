@@ -48,13 +48,13 @@ void SnowMode::UpdateSnow(float dt)
             flake.size = flake.baseSize * (0.3f + 0.7f * lifetimeRatio);
 
             // Check if hit ground or lifetime expired
-            if (flake.y >= m_screenHeight - flake.size)
+            if (flake.y >= flake.groundY - flake.size)
             {
                 if (flake.lifetime > 0.5f)
                 {
                     // Hit ground with remaining lifetime - stay on ground
                     flake.onGround = true;
-                    flake.y = m_screenHeight - flake.size;
+                    flake.y = flake.groundY - flake.size;
                     flake.groundTimer = 0.0f;
                 }
             }
@@ -111,7 +111,7 @@ bool SnowMode::HasActiveElements() const
 
 void SnowMode::AddElement()
 {
-    std::uniform_int_distribution<> distX(0, m_screenWidth);
+    std::uniform_int_distribution<> distX(m_spawnRegion.left, m_spawnRegion.right);
     std::uniform_real_distribution<float> distDepth(0.3f, 1.0f);
     std::uniform_real_distribution<float> distSize(m_SNOW_MIN_SIZE, m_SNOW_MAX_SIZE);
     std::uniform_real_distribution<float> distLifetime(m_SNOW_LIFETIME_MIN, m_SNOW_LIFETIME_MAX);
@@ -123,7 +123,8 @@ void SnowMode::AddElement()
 
     m_snowflakes.emplace_back(Snowflake{
         .x = static_cast<float>(distX(m_gen)),
-        .y = -20.0f,
+        .y = static_cast<float>(m_spawnRegion.top) - 20.0f,
+        .groundY = static_cast<float>(m_spawnRegion.bottom),
         .size = size,
         .baseSize = size,
         .speed = m_SNOW_BASE_SPEED * depth,

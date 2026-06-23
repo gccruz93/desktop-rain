@@ -41,7 +41,7 @@ private:
     float m_JUMP_INTERVAL_MAX = 0.05f;
     int m_CHAR_SIZE = 14;
     static constexpr int m_TRAIL_LENGTH = MATRIX_TRAIL_LENGTH;
-    size_t m_MAX_COLUMNS = 270; // 3840 / 14 = 270. To support 4k monitors
+    size_t m_MAX_COLUMNS = 0; // computed in constructor from screenWidth
 
     std::mt19937 m_gen;
     IDWriteTextFormat *m_textFormat = nullptr;

@@ -6,6 +6,7 @@
 MatrixMode::MatrixMode(int screenWidth, int screenHeight)
     : IMode(screenWidth, screenHeight)
 {
+    m_MAX_COLUMNS = static_cast<size_t>(screenWidth / m_CHAR_SIZE + 1);
     m_matrixColumns.reserve(m_MAX_COLUMNS);
     std::random_device rd;
     m_gen = std::mt19937(rd());
@@ -150,8 +151,12 @@ bool MatrixMode::HasActiveElements() const
 
 void MatrixMode::AddElement()
 {
-    int maxColumns = m_screenWidth / m_CHAR_SIZE;
-    std::uniform_int_distribution<> distX(0, maxColumns - 1);
+    int spawnColLeft  = m_spawnRegion.left  / m_CHAR_SIZE;
+    int spawnColRight = m_spawnRegion.right / m_CHAR_SIZE;
+    if (spawnColRight <= spawnColLeft)
+        return;
+
+    std::uniform_int_distribution<> distX(spawnColLeft, spawnColRight - 1);
     std::uniform_real_distribution<float> distInterval(m_JUMP_INTERVAL_MIN, m_JUMP_INTERVAL_MAX);
 
     int gridX = distX(m_gen);
@@ -164,7 +169,7 @@ void MatrixMode::AddElement()
 
     MatrixColumn newCol{};
     newCol.gridX = gridX;
-    newCol.gridY = -1;
+    newCol.gridY = (m_spawnRegion.top / m_CHAR_SIZE) - 1;
     newCol.jumpInterval = distInterval(m_gen);
     newCol.jumpTimer = 0.0f;
     newCol.active = true;

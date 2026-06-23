@@ -7,5 +7,9 @@ enum class MenuSystray : UINT_PTR
     ShowColorSelector,
     SetModeRain,
     SetModeSnow,
-    SetModeMatrix
+    SetModeMatrix,
+    SetMonitorActive,
+    SetMonitorAll,
+    // Specific monitor slots: SetMonitorSpecific + index (up to 16 monitors)
+    SetMonitorSpecific = 100,
 };

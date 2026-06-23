@@ -6,6 +6,7 @@
 struct Raindrop
 {
     float x, y;
+    float groundY;
     int length;
     float depth;
 };
@@ -48,5 +49,5 @@ private:
     std::mt19937 m_gen;
 
     void UpdateRain(float dt);
-    void SpawnSplash(float x);
+    void SpawnSplash(float x, float groundY);
 };

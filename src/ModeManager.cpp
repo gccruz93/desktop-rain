@@ -58,6 +58,21 @@ void ModeManager::AddElement()
         m_activeMode->AddElement();
 }
 
+void ModeManager::AddElementInRegion(const RECT &region)
+{
+    if (m_activeMode)
+    {
+        m_activeMode->SetSpawnRegion(region);
+        m_activeMode->AddElement();
+    }
+}
+
+void ModeManager::SetSpawnRegion(const RECT &region)
+{
+    if (m_activeMode)
+        m_activeMode->SetSpawnRegion(region);
+}
+
 COLORREF ModeManager::GetColor() const
 {
     return m_activeMode ? m_activeMode->GetColor() : RGB(255, 255, 255);

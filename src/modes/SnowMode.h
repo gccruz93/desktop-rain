@@ -6,6 +6,7 @@
 struct Snowflake
 {
     float x, y;
+    float groundY;
     float size;
     float baseSize;
     float speed;

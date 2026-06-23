@@ -11,10 +11,12 @@ static RainApp *g_pAppInstance = nullptr;
 
 RainApp::RainApp(HINSTANCE hInstance) : m_hInstance(hInstance)
 {
-    m_screenWidth = GetSystemMetrics(SM_CXSCREEN);
-    m_screenHeight = GetSystemMetrics(SM_CYSCREEN);
+    m_virtualX = GetSystemMetrics(SM_XVIRTUALSCREEN);
+    m_virtualY = GetSystemMetrics(SM_YVIRTUALSCREEN);
+    m_virtualW = GetSystemMetrics(SM_CXVIRTUALSCREEN);
+    m_virtualH = GetSystemMetrics(SM_CYVIRTUALSCREEN);
 
-    m_modeManager = std::make_unique<ModeManager>(m_screenWidth, m_screenHeight);
+    m_modeManager = std::make_unique<ModeManager>(m_virtualW, m_virtualH);
 
     g_pAppInstance = this;
 }
@@ -84,6 +86,8 @@ int RainApp::Run()
 
 void RainApp::Update(float dt)
 {
+    // Set spawn region for auto-mode before Update so UpdateAutoSpawn uses the right monitor
+    m_modeManager->SetSpawnRegion(GetAutoSpawnRect());
     m_modeManager->Update(dt);
 }
 
@@ -119,17 +123,19 @@ void RainApp::Clear()
 bool RainApp::InitializeWindow()
 {
     WNDCLASSA wc = {};
-    wc.lpfnWndProc = WindowProc;
-    wc.hInstance = m_hInstance;
+    wc.lpfnWndProc   = WindowProc;
+    wc.hInstance     = m_hInstance;
     wc.lpszClassName = Config::APP_NAME;
     wc.hbrBackground = nullptr;
 
     RegisterClassA(&wc);
 
+    // Window covers the entire virtual desktop (all monitors)
     m_hwnd = CreateWindowExA(
         WS_EX_LAYERED | WS_EX_TOPMOST | WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW,
         Config::APP_NAME, Config::APP_NAME,
-        WS_POPUP, 0, 0, m_screenWidth, m_screenHeight,
+        WS_POPUP,
+        m_virtualX, m_virtualY, m_virtualW, m_virtualH,
         nullptr, nullptr, m_hInstance, this);
 
     if (!m_hwnd)
@@ -137,7 +143,109 @@ bool RainApp::InitializeWindow()
 
     SetLayeredWindowAttributes(m_hwnd, RGB(1, 0, 1), 0, LWA_COLORKEY);
     ShowWindow(m_hwnd, SW_SHOW);
+
+    EnumerateMonitors();
     return true;
+}
+
+BOOL CALLBACK RainApp::MonitorEnumProc(HMONITOR hMon, HDC /*hdc*/, LPRECT lpRect, LPARAM lParam)
+{
+    auto *pApp = reinterpret_cast<RainApp *>(lParam);
+
+    MonitorInfo info{};
+    info.handle     = hMon;
+    info.screenRect = *lpRect;
+    // D2D origin is the virtual desktop top-left
+    info.d2dRect = {
+        lpRect->left   - pApp->m_virtualX,
+        lpRect->top    - pApp->m_virtualY,
+        lpRect->right  - pApp->m_virtualX,
+        lpRect->bottom - pApp->m_virtualY};
+
+    pApp->m_monitors.push_back(info);
+    return TRUE;
+}
+
+void RainApp::EnumerateMonitors()
+{
+    m_monitors.clear();
+    EnumDisplayMonitors(nullptr, nullptr, MonitorEnumProc, reinterpret_cast<LPARAM>(this));
+}
+
+RECT RainApp::GetAutoSpawnRect() const
+{
+    RECT fullVirtual = {0, 0, m_virtualW, m_virtualH};
+
+    if (m_monitors.empty())
+        return fullVirtual;
+
+    switch (m_monitorTarget)
+    {
+    case MonitorTarget::All:
+        return fullVirtual;
+
+    case MonitorTarget::Active:
+    {
+        HWND fgWnd = GetForegroundWindow();
+        if (!fgWnd)
+            return fullVirtual;
+        HMONITOR hMon = MonitorFromWindow(fgWnd, MONITOR_DEFAULTTONEAREST);
+        for (const auto &mon : m_monitors)
+            if (mon.handle == hMon)
+                return mon.d2dRect;
+        return fullVirtual;
+    }
+
+    case MonitorTarget::Specific:
+        if (m_selectedMonitorIndex < static_cast<int>(m_monitors.size()))
+            return m_monitors[m_selectedMonitorIndex].d2dRect;
+        return fullVirtual;
+    }
+
+    return fullVirtual;
+}
+
+void RainApp::AddElementForTarget()
+{
+    if (m_monitors.empty())
+    {
+        m_modeManager->AddElement();
+        return;
+    }
+
+    switch (m_monitorTarget)
+    {
+    case MonitorTarget::All:
+        for (const auto &mon : m_monitors)
+            m_modeManager->AddElementInRegion(mon.d2dRect);
+        break;
+
+    case MonitorTarget::Active:
+    {
+        HWND fgWnd = GetForegroundWindow();
+        HMONITOR hMon = fgWnd ? MonitorFromWindow(fgWnd, MONITOR_DEFAULTTONEAREST) : nullptr;
+        bool found = false;
+        for (const auto &mon : m_monitors)
+        {
+            if (mon.handle == hMon)
+            {
+                m_modeManager->AddElementInRegion(mon.d2dRect);
+                found = true;
+                break;
+            }
+        }
+        if (!found)
+            m_modeManager->AddElement();
+        break;
+    }
+
+    case MonitorTarget::Specific:
+        if (m_selectedMonitorIndex < static_cast<int>(m_monitors.size()))
+            m_modeManager->AddElementInRegion(m_monitors[m_selectedMonitorIndex].d2dRect);
+        else
+            m_modeManager->AddElement();
+        break;
+    }
 }
 
 bool RainApp::InitializeDirect2D()
@@ -219,12 +327,12 @@ void RainApp::DiscardDeviceResources()
 void RainApp::SetupTrayIcon()
 {
     NOTIFYICONDATAA nid = {};
-    nid.cbSize = sizeof(NOTIFYICONDATA);
-    nid.hWnd = m_hwnd;
-    nid.uID = Config::TRAY_ICON_ID;
-    nid.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP;
+    nid.cbSize          = sizeof(NOTIFYICONDATA);
+    nid.hWnd            = m_hwnd;
+    nid.uID             = Config::TRAY_ICON_ID;
+    nid.uFlags          = NIF_ICON | NIF_MESSAGE | NIF_TIP;
     nid.uCallbackMessage = Config::WM_APP_TRAY_ICON;
-    nid.hIcon = LoadIcon(GetModuleHandle(NULL), MAKEINTRESOURCE(101));
+    nid.hIcon           = LoadIcon(GetModuleHandle(NULL), MAKEINTRESOURCE(101));
     if (!nid.hIcon)
     {
         nid.hIcon = LoadIcon(NULL, IDI_APPLICATION);
@@ -238,9 +346,9 @@ void RainApp::CleanupTrayIcon()
     if (m_hwnd)
     {
         NOTIFYICONDATAA nid = {};
-        nid.cbSize = sizeof(NOTIFYICONDATAA);
-        nid.hWnd = m_hwnd;
-        nid.uID = Config::TRAY_ICON_ID;
+        nid.cbSize          = sizeof(NOTIFYICONDATAA);
+        nid.hWnd            = m_hwnd;
+        nid.uID             = Config::TRAY_ICON_ID;
         Shell_NotifyIconA(NIM_DELETE, &nid);
     }
 }
@@ -279,18 +387,38 @@ LRESULT RainApp::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam)
 
             auto menuText = std::format("{} v{}", Config::APP_NAME, Config::APP_VERSION);
 
-            HMENU hMenu = CreatePopupMenu();
-            HMENU hModeMenu = CreatePopupMenu();
+            HMENU hMenu        = CreatePopupMenu();
+            HMENU hModeMenu    = CreatePopupMenu();
+            HMENU hMonitorMenu = CreatePopupMenu();
 
             AppendMenuA(hMenu, MF_STRING | MF_DISABLED | MF_GRAYED, 0, menuText.c_str());
             AppendMenuA(hMenu, MF_SEPARATOR, 0, NULL);
 
             // Mode submenu
             ModeType currentMode = m_modeManager->GetCurrentMode();
-            AppendMenuA(hModeMenu, (currentMode == ModeType::Rain) ? MF_CHECKED : MF_STRING, (UINT_PTR)MenuSystray::SetModeRain, "Rain");
-            AppendMenuA(hModeMenu, (currentMode == ModeType::Snow) ? MF_CHECKED : MF_STRING, (UINT_PTR)MenuSystray::SetModeSnow, "Snow");
+            AppendMenuA(hModeMenu, (currentMode == ModeType::Rain)   ? MF_CHECKED : MF_STRING, (UINT_PTR)MenuSystray::SetModeRain,   "Rain");
+            AppendMenuA(hModeMenu, (currentMode == ModeType::Snow)   ? MF_CHECKED : MF_STRING, (UINT_PTR)MenuSystray::SetModeSnow,   "Snow");
             AppendMenuA(hModeMenu, (currentMode == ModeType::Matrix) ? MF_CHECKED : MF_STRING, (UINT_PTR)MenuSystray::SetModeMatrix, "Matrix");
             AppendMenuA(hMenu, MF_POPUP, (UINT_PTR)hModeMenu, "Mode");
+
+            // Monitor submenu
+            AppendMenuA(hMonitorMenu,
+                        (m_monitorTarget == MonitorTarget::Active) ? MF_CHECKED : MF_STRING,
+                        (UINT_PTR)MenuSystray::SetMonitorActive, "Active Monitor");
+            AppendMenuA(hMonitorMenu,
+                        (m_monitorTarget == MonitorTarget::All) ? MF_CHECKED : MF_STRING,
+                        (UINT_PTR)MenuSystray::SetMonitorAll, "All Monitors");
+            AppendMenuA(hMonitorMenu, MF_SEPARATOR, 0, NULL);
+            for (int i = 0; i < static_cast<int>(m_monitors.size()); ++i)
+            {
+                auto label = std::format("Monitor {}", i + 1);
+                bool sel   = (m_monitorTarget == MonitorTarget::Specific && m_selectedMonitorIndex == i);
+                AppendMenuA(hMonitorMenu,
+                            sel ? MF_CHECKED : MF_STRING,
+                            (UINT_PTR)MenuSystray::SetMonitorSpecific + i,
+                            label.c_str());
+            }
+            AppendMenuA(hMenu, MF_POPUP, (UINT_PTR)hMonitorMenu, "Monitor");
 
             AppendMenuA(hMenu, m_modeManager->GetAutoMode() ? MF_CHECKED : MF_STRING, (UINT_PTR)MenuSystray::ToggleAutoMode, "Auto Mode");
             AppendMenuA(hMenu, MF_STRING, (UINT_PTR)MenuSystray::ShowColorSelector, "Choose Color");
@@ -304,40 +432,60 @@ LRESULT RainApp::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam)
         return 0;
 
     case WM_COMMAND:
-        switch (LOWORD(wParam))
+    {
+        UINT cmd = LOWORD(wParam);
+
+        if (cmd == (UINT)MenuSystray::Exit)
         {
-        case (UINT_PTR)MenuSystray::Exit:
             PostMessage(m_hwnd, WM_QUIT, 0, 0);
-            break;
-        case (UINT_PTR)MenuSystray::ToggleAutoMode:
-            m_modeManager->SetAutoMode(!m_modeManager->GetAutoMode());
-            break;
-        case (UINT_PTR)MenuSystray::ShowColorSelector:
+        }
+        else if (cmd == (UINT)MenuSystray::ToggleAutoMode)
         {
-            CHOOSECOLOR cc = {0};
-            cc.lStructSize = sizeof(cc);
-            cc.hwndOwner = m_hwnd;
-            cc.lpCustColors = m_modeManager->m_customColors.data();
-            cc.rgbResult = m_modeManager->GetColor();
-            cc.Flags = CC_FULLOPEN | CC_RGBINIT;
+            m_modeManager->SetAutoMode(!m_modeManager->GetAutoMode());
+        }
+        else if (cmd == (UINT)MenuSystray::ShowColorSelector)
+        {
+            CHOOSECOLOR cc      = {0};
+            cc.lStructSize      = sizeof(cc);
+            cc.hwndOwner        = m_hwnd;
+            cc.lpCustColors     = m_modeManager->m_customColors.data();
+            cc.rgbResult        = m_modeManager->GetColor();
+            cc.Flags            = CC_FULLOPEN | CC_RGBINIT;
 
             if (ChooseColor(&cc))
             {
                 m_modeManager->SetColor(cc.rgbResult);
             }
-            break;
         }
-        case (UINT_PTR)MenuSystray::SetModeRain:
+        else if (cmd == (UINT)MenuSystray::SetModeRain)
+        {
             m_modeManager->SetMode(ModeType::Rain);
-            break;
-        case (UINT_PTR)MenuSystray::SetModeSnow:
-            m_modeManager->SetMode(ModeType::Snow);
-            break;
-        case (UINT_PTR)MenuSystray::SetModeMatrix:
-            m_modeManager->SetMode(ModeType::Matrix);
-            break;
         }
+        else if (cmd == (UINT)MenuSystray::SetModeSnow)
+        {
+            m_modeManager->SetMode(ModeType::Snow);
+        }
+        else if (cmd == (UINT)MenuSystray::SetModeMatrix)
+        {
+            m_modeManager->SetMode(ModeType::Matrix);
+        }
+        else if (cmd == (UINT)MenuSystray::SetMonitorActive)
+        {
+            m_monitorTarget = MonitorTarget::Active;
+        }
+        else if (cmd == (UINT)MenuSystray::SetMonitorAll)
+        {
+            m_monitorTarget = MonitorTarget::All;
+        }
+        else if (cmd >= (UINT)MenuSystray::SetMonitorSpecific &&
+                 cmd < (UINT)MenuSystray::SetMonitorSpecific + (UINT)m_monitors.size())
+        {
+            m_monitorTarget        = MonitorTarget::Specific;
+            m_selectedMonitorIndex = static_cast<int>(cmd - (UINT)MenuSystray::SetMonitorSpecific);
+        }
+
         return 0;
+    }
 
     case WM_DESTROY:
         PostQuitMessage(0);
@@ -366,7 +514,7 @@ LRESULT CALLBACK RainApp::KeyboardProc(int nCode, WPARAM wParam, LPARAM lParam)
         default:
             if (g_pAppInstance && !g_pAppInstance->m_modeManager->GetAutoMode())
             {
-                g_pAppInstance->m_modeManager->AddElement();
+                g_pAppInstance->AddElementForTarget();
             }
         }
     }

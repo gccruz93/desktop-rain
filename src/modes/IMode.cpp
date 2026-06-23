@@ -1,7 +1,8 @@
 #include "IMode.h"
 
 IMode::IMode(int screenWidth, int screenHeight)
-    : m_screenWidth(screenWidth), m_screenHeight(screenHeight)
+    : m_screenWidth(screenWidth), m_screenHeight(screenHeight),
+      m_spawnRegion{0, 0, screenWidth, screenHeight}
 {
 }
 

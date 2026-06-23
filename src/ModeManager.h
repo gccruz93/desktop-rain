@@ -19,6 +19,8 @@ public:
 
     bool HasActiveElements() const;
     void AddElement();
+    void AddElementInRegion(const RECT &region);
+    void SetSpawnRegion(const RECT &region);
 
     ModeType GetCurrentMode() const { return m_currentMode; }
     void SetAutoMode(bool autoMode);

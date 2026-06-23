@@ -42,14 +42,14 @@ void RainMode::UpdateRain(float dt)
         drop.x += (m_MAX_WIND_SPEED * windFactor * drop.depth) * dt;
         drop.y += (m_raindropSpeedY * drop.depth) * dt;
 
-        if (drop.y > m_screenHeight)
+        if (drop.y > drop.groundY)
         {
-            SpawnSplash(drop.x);
+            SpawnSplash(drop.x, drop.groundY);
         }
     }
 
     std::erase_if(m_raindrops, [this](const Raindrop &r)
-                  { return r.y > m_screenHeight || r.x < -50.0f || r.x > m_screenWidth + 50.0f; });
+                  { return r.y > r.groundY || r.x < -50.0f || r.x > m_screenWidth + 50.0f; });
 
     if (m_raindrops.size() > m_MAX_RAINDROPS)
     {
@@ -116,18 +116,19 @@ bool RainMode::HasActiveElements() const
 
 void RainMode::AddElement()
 {
-    std::uniform_int_distribution<> distX(0, m_screenWidth);
+    std::uniform_int_distribution<> distX(m_spawnRegion.left, m_spawnRegion.right);
     std::uniform_real_distribution<> distDepth(0.4f, 1.0f);
 
     float depth = distDepth(m_gen);
     m_raindrops.emplace_back(Raindrop{
         .x = static_cast<float>(distX(m_gen)),
-        .y = -50.0f,
+        .y = static_cast<float>(m_spawnRegion.top) - 50.0f,
+        .groundY = static_cast<float>(m_spawnRegion.bottom),
         .length = 5 + static_cast<int>(25 * depth),
         .depth = depth});
 }
 
-void RainMode::SpawnSplash(float x)
+void RainMode::SpawnSplash(float x, float groundY)
 {
     std::uniform_int_distribution<> distCount(3, 5);
     std::uniform_real_distribution<float> distAngle(0.0f, 3.14159f);
@@ -139,15 +140,15 @@ void RainMode::SpawnSplash(float x)
     {
         float angle = distAngle(m_gen);
         float speed = distSpeed(m_gen);
+        float life = distLife(m_gen);
 
         m_particles.emplace_back(RainSplash{
             .x = x,
-            .y = static_cast<float>(m_screenHeight - 1),
+            .y = groundY - 1.0f,
             .vx = std::cos(angle) * speed,
             .vy = -std::abs(std::sin(angle) * speed),
-            .lifetime = distLife(m_gen),
-            .maxLifetime = distLife(m_gen)});
-        m_particles.back().maxLifetime = m_particles.back().lifetime;
+            .lifetime = life,
+            .maxLifetime = life});
     }
 }
 
