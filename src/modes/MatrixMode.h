@@ -4,13 +4,15 @@
 #include <random>
 #include <dwrite.h>
 
+static constexpr int MATRIX_TRAIL_LENGTH = 10;
+
 struct MatrixColumn
 {
     int gridX;
     int gridY;
     float jumpInterval;
     float jumpTimer;
-    wchar_t chars[6];
+    wchar_t chars[MATRIX_TRAIL_LENGTH];
     bool active;
 };
 
@@ -38,7 +40,7 @@ private:
     float m_JUMP_INTERVAL_MIN = 0.02f;
     float m_JUMP_INTERVAL_MAX = 0.05f;
     int m_CHAR_SIZE = 14;
-    int m_TRAIL_LENGTH = 10;
+    static constexpr int m_TRAIL_LENGTH = MATRIX_TRAIL_LENGTH;
     size_t m_MAX_COLUMNS = 270; // 3840 / 14 = 270. To support 4k monitors
 
     std::mt19937 m_gen;
