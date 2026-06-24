@@ -84,6 +84,19 @@ int RainApp::Run()
             Update(dt);
             Render();
         }
+        else if (m_modeManager->GetAutoMode())
+        {
+            // No elements on screen but automode is active — wait up to 50ms
+            // for messages so the loop stays responsive, then tick UpdateAutoSpawn.
+            MsgWaitForMultipleObjects(0, nullptr, FALSE, 50, QS_ALLINPUT);
+
+            auto now = std::chrono::high_resolution_clock::now();
+            std::chrono::duration<float> diff = now - lastTime;
+            float dt = diff.count();
+            lastTime = now;
+
+            Update(dt);
+        }
         else
         {
             WaitMessage();
