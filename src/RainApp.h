@@ -28,7 +28,8 @@ private:
     HINSTANCE m_hInstance;
     HWND      m_hwnd    = nullptr;
     HHOOK     m_hook    = nullptr;
-    bool      m_running = true;
+    bool      m_running       = true;
+    bool      m_pendingRender = false;
 
     // Virtual desktop dimensions
     int m_virtualX = 0;

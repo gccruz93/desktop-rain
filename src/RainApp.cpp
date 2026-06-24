@@ -96,9 +96,18 @@ int RainApp::Run()
             lastTime = now;
 
             Update(dt);
+            // Always render in this branch: clears stale frames from mode switches
+            // and shows elements as soon as UpdateAutoSpawn spawns the first one.
+            Render();
+            m_pendingRender = false;
         }
         else
         {
+            if (m_pendingRender)
+            {
+                m_pendingRender = false;
+                Render();
+            }
             WaitMessage();
             lastTime = std::chrono::high_resolution_clock::now();
         }
@@ -494,14 +503,17 @@ LRESULT RainApp::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam)
         else if (cmd == (UINT)MenuSystray::SetModeRain)
         {
             m_modeManager->SetMode(ModeType::Rain);
+            m_pendingRender = true;
         }
         else if (cmd == (UINT)MenuSystray::SetModeSnow)
         {
             m_modeManager->SetMode(ModeType::Snow);
+            m_pendingRender = true;
         }
         else if (cmd == (UINT)MenuSystray::SetModeMatrix)
         {
             m_modeManager->SetMode(ModeType::Matrix);
+            m_pendingRender = true;
         }
         else if (cmd == (UINT)MenuSystray::SetMonitorActive)
         {
